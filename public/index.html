@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Domotique - Suivi consommation</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <style>
+        /* Styles pour la page de connexion */
+        * { box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            margin: 0;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        /* Styles pour l'interface principale (repris de l'original) */
+        .dashboard-container {
+            max-width: 1200px;
+            margin: 20px auto;
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 15px rgba(0,0,0,0.1);
+            display: none;
+        }
+        .login-card {
+            background: white;
+            padding: 40px;
+            border-radius: 16px;
+            box-shadow: 0 20px 35px rgba(0,0,0,0.2);
+            width: 350px;
+            text-align: center;
+        }
+        h1 { color: #2c3e50; margin-bottom: 30px; font-size: 28px; }
+        input {
+            width: 100%;
+            padding: 12px;
+            margin: 12px 0;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 16px;
+        }
+        button {
+            width: 100%;
+            padding: 12px;
+            background: #3498db;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+        button:hover { background: #2980b9; }
+        .error { color: #e74c3c; margin-top: 15px; font-size: 14px; }
+        .footer { margin-top: 20px; font-size: 12px; color: #7f8c8d; }
+        /* Styles du tableau de bord (copiés) */
+        .container { max-width: 1200px; margin: auto; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 0 15px rgba(0,0,0,0.1); }
+        h1, h2, h3 { color: #2c3e50; }
+        .tabs { display: flex; gap: 10px; margin-bottom: 20px; border-bottom: 1px solid #ddd; flex-wrap: wrap; }
+        .tab { padding: 10px 20px; cursor: pointer; background: #f8f9fa; border: 1px solid #ddd; border-bottom: none; border-radius: 5px 5px 0 0; }
+        .tab.active { background: #3498db; color: white; border-color: #3498db; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        .filters { margin: 20px 0; display: flex; gap: 15px; align-items: flex-end; flex-wrap: wrap; }
+        .filters label { font-weight: bold; margin-right: 5px; }
+        .filters input, .filters button, .filters select { padding: 8px 12px; border: 1px solid #ccc; border-radius: 5px; font-size: 14px; }
+        .filters button { background: #3498db; color: white; border: none; cursor: pointer; transition: 0.2s; }
+        .filters button:hover { background: #2980b9; }
+        .stats { display: flex; gap: 20px; margin-top: 25px; flex-wrap: wrap; }
+        .card { background: #f9f9f9; border-radius: 8px; padding: 20px; flex: 1; min-width: 200px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); border-left: 4px solid #3498db; }
+        .card h3 { margin-top: 0; color: #555; font-size: 18px; }
+        .card .value { font-size: 28px; font-weight: bold; margin: 10px 0; color: #2c3e50; }
+        canvas { max-width: 100%; margin-top: 25px; background: white; border-radius: 8px; padding: 10px; }
+        .error { color: #e74c3c; margin-top: 10px; }
+        footer { margin-top: 30px; text-align: center; font-size: 12px; color: #7f8c8d; border-top: 1px solid #ecf0f1; padding-top: 15px; }
+        .alert { background: #f8d7da; color: #721c24; padding: 10px; border-radius: 5px; margin-bottom: 15px; }
+        .thresholds { display: flex; gap: 15px; margin-bottom: 20px; align-items: center; }
+        .thresholds input { width: 100px; }
+        button.export { background: #27ae60; margin-left: 10px; }
+        button.export:hover { background: #2ecc71; }
+        .invoice { background: white; padding: 20px; border-radius: 8px; margin-top: 20px; }
+        .invoice h2, .invoice h3 { color: #2c3e50; }
+        .auto-refresh { background: #f1c40f; margin-left: 20px; }
+        .auto-refresh.active { background: #27ae60; }
+        .current-month-summary { margin-bottom: 20px; }
+        .logout-btn { float: right; background: #e74c3c; color: white; border: none; padding: 8px 16px; border-radius: 5px; cursor: pointer; margin-bottom: 10px; }
+        .logout-btn:hover { background: #c0392b; }
+        @media (max-width: 768px) { .stats { flex-direction: column; } }
+    </style>
+</head>
+<body>
+    <!-- Conteneur de connexion -->
+    <div id="loginContainer" class="login-card" style="display: flex;">
+        <div style="width:100%">
+            <h1>🔌 Domotique</h1>
+            <input type="text" id="username" placeholder="Nom d'utilisateur" autocomplete="off">
+            <input type="password" id="password" placeholder="Mot de passe">
+            <button onclick="login()">Se connecter</button>
+            <div id="errorMsg" class="error"></div>
+            <div class="footer">Suivi de consommation</div>
+        </div>
+    </div>
+
+    <!-- Conteneur du tableau de bord (initialement caché) -->
+    <div id="dashboardContainer" class="dashboard-container" style="display: none;">
+        <div class="container" id="reportContent">
+            <div style="overflow: auto;">
+                <h1 style="float: left;">📊 Suivi des consommations</h1>
+                <button class="logout-btn" onclick="logout()">Déconnexion</button>
+            </div>
+
+            <div id="alertMessage" style="display:none;" class="alert"></div>
+            <div id="currentMonthSummary" class="stats current-month-summary"></div>
+
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
+                <div class="tabs">
+                    <div class="tab active" data-tab="daily">Journalier</div>
+                    <div class="tab" data-tab="weekly">Hebdomadaire</div>
+                    <div class="tab" data-tab="comparison">Comparaison mensuelle</div>
+                    <div class="tab" data-tab="stats">Stats & Seuils</div>
+                    <div class="tab" data-tab="invoice">Facture</div>
+                </div>
+                <div>
+                    <button id="autoRefreshBtn" class="auto-refresh" onclick="toggleAutoRefresh()">🔄 Auto-actualisation OFF</button>
+                </div>
+            </div>
+
+            <!-- Onglet Journalier -->
+            <div id="daily" class="tab-content active">
+                <div class="filters">
+                    <div><label>📅 Du :</label><input type="date" id="startDate"></div>
+                    <div><label>Au :</label><input type="date" id="endDate"></div>
+                    <button onclick="loadChart()">🔄 Actualiser</button>
+                    <button class="export" onclick="exportPDF()">📄 Exporter tout le rapport</button>
+                </div>
+                <canvas id="consumptionChart" width="800" height="400"></canvas>
+            </div>
+
+            <!-- Onglet Hebdomadaire -->
+            <div id="weekly" class="tab-content">
+                <div class="filters">
+                    <div><label>Année :</label><input type="number" id="weekYear" value="2026" step="1"></div>
+                    <button onclick="loadWeeklyStats()">Afficher</button>
+                </div>
+                <canvas id="weeklyChart" width="800" height="400"></canvas>
+            </div>
+
+            <!-- Onglet Comparaison mensuelle -->
+            <div id="comparison" class="tab-content">
+                <div class="filters">
+                    <div><label>Mois :</label><input type="month" id="compareMonth"></div>
+                    <button onclick="loadComparison()">Comparer</button>
+                </div>
+                <div id="comparisonResult" class="stats"></div>
+            </div>
+
+            <!-- Onglet Stats & Seuils -->
+            <div id="stats" class="tab-content">
+                <div class="filters">
+                    <div><label>Du :</label><input type="date" id="statsStart"></div>
+                    <div><label>Au :</label><input type="date" id="statsEnd"></div>
+                    <button onclick="loadStats()">Calculer</button>
+                </div>
+                <div id="statsResult" class="stats"></div>
+                <h3>⚙️ Paramètres d'alerte</h3>
+                <div class="thresholds">
+                    <div>Seuil électricité (kWh) : <input type="number" id="elecThreshold" step="0.1"></div>
+                    <div>Seuil eau (m³) : <input type="number" id="waterThreshold" step="0.1"></div>
+                    <button onclick="saveThresholds()">Enregistrer</button>
+                </div>
+                <p id="thresholdStatus"></p>
+            </div>
+
+            <!-- Onglet Facture -->
+            <div id="invoice" class="tab-content">
+                <div class="filters">
+                    <div><label>Mois :</label><input type="month" id="invoiceMonth"></div>
+                    <button onclick="loadInvoice()">Calculer la facture</button>
+                    <button class="export" onclick="exportInvoicePDF()">📄 Exporter la facture PDF</button>
+                </div>
+                <div id="invoiceResult" class="invoice"></div>
+            </div>
+            <footer>Données actualisées automatiquement toutes les heures via l'ESP32</footer>
+        </div>
+    </div>
+
+    <script>
+        let dailyChart, weeklyChart;
+        let autoRefreshInterval = null;
+        let autoRefreshActive = false;
+
+        // --- Fonctions d'authentification ---
+        async function login() {
+            const username = document.getElementById('username').value.trim();
+            const password = document.getElementById('password').value;
+            if (!username || !password) {
+                document.getElementById('errorMsg').innerText = 'Veuillez remplir tous les champs';
+                return;
+            }
+            try {
+                const res = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+                if (res.ok) {
+                    // Cacher le formulaire, afficher le tableau de bord
+                    document.getElementById('loginContainer').style.display = 'none';
+                    document.getElementById('dashboardContainer').style.display = 'block';
+                    // Initialiser le tableau de bord
+                    initDashboard();
+                } else {
+                    const data = await res.json();
+                    document.getElementById('errorMsg').innerText = data.error || 'Identifiants incorrects';
+                }
+            } catch (err) {
+                document.getElementById('errorMsg').innerText = 'Erreur de connexion au serveur';
+            }
+        }
+
+        async function logout() {
+            await fetch('/api/logout', { method: 'POST' });
+            // Revenir à l'écran de connexion
+            document.getElementById('dashboardContainer').style.display = 'none';
+            document.getElementById('loginContainer').style.display = 'flex';
+            // Nettoyer les intervalles
+            if (autoRefreshInterval) clearInterval(autoRefreshInterval);
+            autoRefreshActive = false;
+        }
+
+        // Vérifier si déjà authentifié au chargement de la page
+        async function checkAuth() {
+            try {
+                const res = await fetch('/api/check_auth');
+                const data = await res.json();
+                if (data.authenticated) {
+                    document.getElementById('loginContainer').style.display = 'none';
+                    document.getElementById('dashboardContainer').style.display = 'block';
+                    initDashboard();
+                }
+            } catch (err) {
+                // Rester sur la page de connexion
+            }
+        }
+
+        // Initialisation du tableau de bord (identique à window.onload précédent)
+        function initDashboard() {
+            const now = new Date();
+            const year = now.getFullYear();
+            const month = now.getMonth();
+            const firstDay = new Date(year, month, 1);
+            const lastDay = new Date(year, month + 1, 0);
+            const startDateStr = firstDay.toISOString().split('T')[0];
+            const endDateStr = lastDay.toISOString().split('T')[0];
+            document.getElementById('startDate').value = startDateStr;
+            document.getElementById('endDate').value = endDateStr;
+            document.getElementById('statsStart').value = startDateStr;
+            document.getElementById('statsEnd').value = endDateStr;
+            const currentMonth = `${year}-${String(month+1).padStart(2,'0')}`;
+            document.getElementById('compareMonth').value = currentMonth;
+            document.getElementById('invoiceMonth').value = currentMonth;
+
+            loadCurrentMonthSummary();
+            loadChart();
+            loadWeeklyStats();
+            loadComparison();
+            loadStats();
+            loadThresholds();
+            checkAlerts();
+            loadInvoice();
+
+            // Gestion des onglets (à réattacher car le DOM a changé)
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.removeEventListener('click', handleTabClick);
+                tab.addEventListener('click', handleTabClick);
+            });
+        }
+
+        function handleTabClick(e) {
+            const tab = e.currentTarget;
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            tab.classList.add('active');
+            const tabId = tab.getAttribute('data-tab');
+            document.getElementById(tabId).classList.add('active');
+        }
+
+        // --- Toutes les fonctions de chargement (inchangées) ---
+        function toggleAutoRefresh() {
+            const btn = document.getElementById('autoRefreshBtn');
+            if (autoRefreshActive) {
+                clearInterval(autoRefreshInterval);
+                autoRefreshActive = false;
+                btn.textContent = '🔄 Auto-actualisation OFF';
+                btn.style.backgroundColor = '#f1c40f';
+            } else {
+                autoRefreshInterval = setInterval(() => {
+                    loadCurrentMonthSummary();
+                    loadChart();
+                    loadWeeklyStats();
+                    loadComparison();
+                    loadStats();
+                    loadInvoice();
+                    checkAlerts();
+                }, 30000);
+                autoRefreshActive = true;
+                btn.textContent = '🔄 Auto-actualisation ON (30s)';
+                btn.style.backgroundColor = '#27ae60';
+            }
+        }
+
+        async function loadCurrentMonthSummary() {
+            const now = new Date();
+            const year = now.getFullYear();
+            const month = String(now.getMonth() + 1).padStart(2,'0');
+            try {
+                const res = await fetch(`/api/stats/monthly?year=${year}&month=${month}`);
+                if (!res.ok) throw new Error();
+                const data = await res.json();
+                const monthName = now.toLocaleString('fr-FR', { month: 'long', year: 'numeric' });
+                document.getElementById('currentMonthSummary').innerHTML = `
+                    <div class="card"><h3>📆 Mois en cours : ${monthName}</h3>
+                    <div>⚡ Électricité : ${data.total_elec_kwh.toFixed(2)} kWh</div>
+                    <div>💧 Eau : ${data.total_water_m3.toFixed(2)} m³</div>
+                    <div style="margin-top:10px;"><strong>💰 Coût total estimé : ${data.total_fcfa.toLocaleString()} FCFA</strong></div></div>
+                    <div class="card"><h3>📊 Détail coût</h3>
+                    <div>Électricité : ${data.cost_elec_fcfa.toLocaleString()} FCFA</div>
+                    <div>Eau : ${data.cost_water_fcfa.toLocaleString()} FCFA</div></div>
+                `;
+            } catch (err) { console.error(err); }
+        }
+
+        async function loadChart() {
+            const start = document.getElementById('startDate').value;
+            const end = document.getElementById('endDate').value;
+            if (!start || !end) return;
+            try {
+                const res = await fetch(`/api/stats/daily?start=${start}&end=${end}`);
+                if (!res.ok) throw new Error();
+                const data = await res.json();
+                const labels = data.map(d => d.date);
+                const elec = data.map(d => d.elec);
+                const water = data.map(d => d.water);
+                if (dailyChart) dailyChart.destroy();
+                const ctx = document.getElementById('consumptionChart').getContext('2d');
+                dailyChart = new Chart(ctx, {
+                    type: 'line',
+                    data: { labels, datasets: [
+                        { label: 'Électricité (kWh)', data: elec, borderColor: '#e67e22', backgroundColor: 'rgba(230,126,34,0.1)', fill: true, tension: 0.2 },
+                        { label: 'Eau (m³)', data: water, borderColor: '#3498db', backgroundColor: 'rgba(52,152,219,0.1)', fill: true, tension: 0.2 }
+                    ]},
+                    options: { responsive: true, scales: { y: { beginAtZero: true } } }
+                });
+            } catch (err) { console.error(err); alert('Erreur chargement graphique'); }
+        }
+
+        async function loadWeeklyStats() {
+            const year = document.getElementById('weekYear').value;
+            try {
+                const res = await fetch(`/api/stats/weekly?year=${year}`);
+                const data = await res.json();
+                const labels = data.map(d => `Semaine ${d.week}`);
+                const elec = data.map(d => d.elec);
+                const water = data.map(d => d.water);
+                if (weeklyChart) weeklyChart.destroy();
+                const ctx = document.getElementById('weeklyChart').getContext('2d');
+                weeklyChart = new Chart(ctx, {
+                    type: 'bar',
+                    data: { labels, datasets: [
+                        { label: 'Électricité (kWh)', data: elec, backgroundColor: '#e67e22' },
+                        { label: 'Eau (m³)', data: water, backgroundColor: '#3498db' }
+                    ]},
+                    options: { responsive: true, scales: { y: { beginAtZero: true } } }
+                });
+            } catch (err) { console.error(err); }
+        }
+
+        async function loadComparison() {
+            const month = document.getElementById('compareMonth').value;
+            if (!month) return;
+            const [year, monthNum] = month.split('-');
+            try {
+                const res = await fetch(`/api/stats/monthly_comparison?year=${year}&month=${monthNum}`);
+                const data = await res.json();
+                document.getElementById('comparisonResult').innerHTML = `
+                    <div class="card"><h3>📆 Mois actuel</h3><div>Électricité : ${data.current.elec.toFixed(2)} kWh</div><div>Eau : ${data.current.water.toFixed(2)} m³</div></div>
+                    <div class="card"><h3>📅 Mois précédent</h3><div>Électricité : ${data.previous.elec.toFixed(2)} kWh</div><div>Eau : ${data.previous.water.toFixed(2)} m³</div></div>
+                    <div class="card"><h3>📈 Variation</h3><div>Électricité : ${data.variation_elec > 0 ? '+' : ''}${data.variation_elec.toFixed(2)} kWh</div><div>Eau : ${data.variation_water > 0 ? '+' : ''}${data.variation_water.toFixed(2)} m³</div></div>
+                `;
+            } catch (err) { console.error(err); }
+        }
+
+        async function loadStats() {
+            const start = document.getElementById('statsStart').value;
+            const end = document.getElementById('statsEnd').value;
+            if (!start || !end) return;
+            try {
+                const res = await fetch(`/api/stats/average_max?start=${start}&end=${end}`);
+                const data = await res.json();
+                document.getElementById('statsResult').innerHTML = `
+                    <div class="card"><h3>📊 Électricité</h3><div>Moyenne journalière : ${data.avg_elec.toFixed(2)} kWh</div><div>Maximum journalier : ${data.max_elec.toFixed(2)} kWh</div></div>
+                    <div class="card"><h3>💧 Eau</h3><div>Moyenne journalière : ${data.avg_water.toFixed(2)} m³</div><div>Maximum journalier : ${data.max_water.toFixed(2)} m³</div></div>
+                `;
+            } catch (err) { console.error(err); }
+        }
+
+        async function loadThresholds() {
+            try {
+                const res = await fetch('/api/thresholds');
+                const data = await res.json();
+                document.getElementById('elecThreshold').value = data.elec_threshold;
+                document.getElementById('waterThreshold').value = data.water_threshold;
+            } catch (err) { console.error(err); }
+        }
+
+        async function saveThresholds() {
+            const elec = parseFloat(document.getElementById('elecThreshold').value);
+            const water = parseFloat(document.getElementById('waterThreshold').value);
+            if (isNaN(elec) || isNaN(water)) return;
+            try {
+                const res = await fetch('/api/thresholds', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ elec_threshold: elec, water_threshold: water })
+                });
+                if (res.ok) {
+                    document.getElementById('thresholdStatus').innerText = '✅ Seuils enregistrés';
+                    setTimeout(() => document.getElementById('thresholdStatus').innerText = '', 2000);
+                    checkAlerts();
+                } else {
+                    document.getElementById('thresholdStatus').innerText = '❌ Erreur enregistrement';
+                }
+            } catch (err) { console.error(err); }
+        }
+
+        async function checkAlerts() {
+            try {
+                const thresholds = await fetch('/api/thresholds').then(r => r.json());
+                const now = new Date();
+                const year = now.getFullYear();
+                const month = String(now.getMonth()+1).padStart(2,'0');
+                const costResp = await fetch(`/api/stats/monthly?year=${year}&month=${month}`);
+                const costData = await costResp.json();
+                const elecMonth = costData.total_elec_kwh;
+                const waterMonth = costData.total_water_m3;
+                const messages = [];
+                if (elecMonth > thresholds.elec_threshold) messages.push(`⚠️ Consommation électrique mensuelle (${elecMonth} kWh) dépasse le seuil de ${thresholds.elec_threshold} kWh.`);
+                if (waterMonth > thresholds.water_threshold) messages.push(`⚠️ Consommation d'eau mensuelle (${waterMonth} m³) dépasse le seuil de ${thresholds.water_threshold} m³.`);
+                const alertDiv = document.getElementById('alertMessage');
+                if (messages.length) {
+                    alertDiv.innerHTML = messages.join('<br>');
+                    alertDiv.style.display = 'block';
+                } else alertDiv.style.display = 'none';
+            } catch (err) { console.error(err); }
+        }
+
+        async function loadInvoice() {
+            const month = document.getElementById('invoiceMonth').value;
+            if (!month) return;
+            const [year, monthNum] = month.split('-');
+            try {
+                const res = await fetch(`/api/stats/monthly?year=${year}&month=${monthNum}`);
+                const data = await res.json();
+                const date = new Date(year, monthNum-1, 1);
+                const monthName = date.toLocaleString('fr-FR', { month: 'long', year: 'numeric' });
+                document.getElementById('invoiceResult').innerHTML = `
+                    <div style="border:1px solid #ddd;border-radius:8px;padding:20px;background:#fff;">
+                        <h2 style="text-align:center;">FACTURE MENSUELLE</h2>
+                        <p style="text-align:center;">${monthName}</p><hr>
+                        <div style="display:flex;justify-content:space-between;"><strong>Consommation électrique</strong><div>${data.total_elec_kwh.toFixed(2)} kWh</div></div>
+                        <div style="display:flex;justify-content:space-between;">Coût électricité<div>${data.cost_elec_fcfa.toLocaleString()} FCFA</div></div>
+                        <div style="display:flex;justify-content:space-between;margin-top:10px;"><strong>Consommation d'eau</strong><div>${data.total_water_m3.toFixed(2)} m³</div></div>
+                        <div style="display:flex;justify-content:space-between;">Coût eau<div>${data.cost_water_fcfa.toLocaleString()} FCFA</div></div>
+                        <hr>
+                        <div style="display:flex;justify-content:space-between;font-size:20px;font-weight:bold;"><div>TOTAL TTC</div><div>${data.total_fcfa.toLocaleString()} FCFA</div></div>
+                        <p style="text-align:center;font-size:12px;color:#777;">* Facture générée automatiquement à partir des relevés réels.</p>
+                    </div>
+                `;
+            } catch (err) { console.error(err); }
+        }
+
+        async function exportPDF() {
+            const { jsPDF } = window.jspdf;
+            const element = document.getElementById('reportContent');
+            try {
+                const canvas = await html2canvas(element, { scale: 2 });
+                const imgData = canvas.toDataURL('image/png');
+                const pdf = new jsPDF('p', 'mm', 'a4');
+                const imgWidth = 190;
+                const imgHeight = (canvas.height * imgWidth) / canvas.width;
+                pdf.addImage(imgData, 'PNG', 10, 10, imgWidth, imgHeight);
+                pdf.save('rapport_consommation.pdf');
+            } catch (err) { alert('Erreur PDF'); }
+        }
+
+        async function exportInvoicePDF() {
+            const invoiceDiv = document.getElementById('invoiceResult');
+            if (!invoiceDiv.innerHTML.trim()) { alert("Calculez d'abord la facture."); return; }
+            const temp = document.createElement('div');
+            temp.style.padding = '20px';
+            temp.style.backgroundColor = 'white';
+            temp.style.width = '800px';
+            temp.appendChild(invoiceDiv.cloneNode(true));
+            document.body.appendChild(temp);
+            try {
+                const { jsPDF } = window.jspdf;
+                const canvas = await html2canvas(temp, { scale: 2 });
+                const imgData = canvas.toDataURL('image/png');
+                const pdf = new jsPDF('p', 'mm', 'a4');
+                const imgWidth = 190;
+                const imgHeight = (canvas.height * imgWidth) / canvas.width;
+                pdf.addImage(imgData, 'PNG', 10, 10, imgWidth, imgHeight);
+                pdf.save('facture_mensuelle.pdf');
+            } catch (err) { alert('Erreur facture PDF'); }
+            finally { document.body.removeChild(temp); }
+        }
+
+        // Vérification de l'authentification au chargement
+        checkAuth();
+
+        // Soumission avec Entrée sur la page de connexion
+        document.getElementById('password').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') login();
+        });
+    </script>
+</body>
+</html>
