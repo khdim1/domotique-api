@@ -1,6 +1,11 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
+    <link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#3498db">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="apple-touch-icon" href="/icons/icon-192x192.png">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Domotique - Suivi consommation</title>
@@ -8,6 +13,16 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <style>
+        @media (max-width: 768px) {
+  .container { padding: 10px; margin: 10px; }
+  .tabs { gap: 5px; }
+  .tab { padding: 8px 12px; font-size: 12px; }
+  .filters { flex-direction: column; align-items: stretch; }
+  .filters button { margin-left: 0; margin-top: 5px; }
+  .card { min-width: auto; }
+  .logout-btn { float: none; margin-bottom: 15px; }
+  canvas { max-height: 300px; }
+}
         /* Styles pour la page de connexion */
         * { box-sizing: border-box; }
         body {
@@ -530,5 +545,14 @@
             if (e.key === 'Enter') login();
         });
     </script>
+    <script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js')
+      .then(reg => console.log('Service Worker enregistré', reg))
+      .catch(err => console.log('Erreur SW', err));
+  });
+}
+</script>
 </body>
 </html>
